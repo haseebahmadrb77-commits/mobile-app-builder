@@ -2,6 +2,7 @@ import { Layout } from "@/components/layout/Layout";
 import { BookCard } from "@/components/shared/BookCard";
 import { CategoryCard } from "@/components/shared/CategoryCard";
 import { SearchBar } from "@/components/shared/SearchBar";
+import { FeaturedCarousel } from "@/components/shared/FeaturedCarousel";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Sparkles, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -125,18 +126,7 @@ export default function Index() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-          {featuredBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              id={book.id}
-              title={book.title}
-              author={book.author}
-              rating={book.rating}
-              category={book.category}
-            />
-          ))}
-        </div>
+        <FeaturedCarousel books={featuredBooks} />
       </section>
 
       {/* Recent Additions */}
