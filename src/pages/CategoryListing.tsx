@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { BookCard } from "@/components/shared/BookCard";
+import { FilterSidebar } from "@/components/shared/FilterSidebar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
-import { SlidersHorizontal } from "lucide-react";
 
 // Mock data
 const mockBooks = [
@@ -23,7 +24,17 @@ export default function CategoryListing() {
   const [searchParams] = useSearchParams();
   const subcategory = searchParams.get("subcategory");
 
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [minRating, setMinRating] = useState(0);
+
   const categoryTitle = category === "islamic" ? "Islamic Books" : "General Books";
+
+  const clearFilters = () => {
+    setSelectedAuthors([]);
+    setSelectedYears([]);
+    setMinRating(0);
+  };
 
   return (
     <Layout>
@@ -70,25 +81,48 @@ export default function CategoryListing() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" size="icon">
-              <SlidersHorizontal className="h-4 w-4" />
-            </Button>
+            <FilterSidebar
+              selectedAuthors={selectedAuthors}
+              selectedYears={selectedYears}
+              minRating={minRating}
+              onAuthorChange={setSelectedAuthors}
+              onYearChange={setSelectedYears}
+              onRatingChange={setMinRating}
+              onClearFilters={clearFilters}
+            />
           </div>
         </div>
 
-        {/* Books Grid */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {mockBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              id={book.id}
-              title={book.title}
-              author={book.author}
-              rating={book.rating}
-              category={book.category}
-              downloadCount={book.downloadCount}
-            />
-          ))}
+        {/* Main Content with Sidebar */}
+        <div className="flex gap-6">
+          {/* Filter Sidebar - Desktop */}
+          <FilterSidebar
+            selectedAuthors={selectedAuthors}
+            selectedYears={selectedYears}
+            minRating={minRating}
+            onAuthorChange={setSelectedAuthors}
+            onYearChange={setSelectedYears}
+            onRatingChange={setMinRating}
+            onClearFilters={clearFilters}
+            className="w-64 flex-shrink-0"
+          />
+
+          {/* Books Grid */}
+          <div className="flex-1">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {mockBooks.map((book) => (
+                <BookCard
+                  key={book.id}
+                  id={book.id}
+                  title={book.title}
+                  author={book.author}
+                  rating={book.rating}
+                  category={book.category}
+                  downloadCount={book.downloadCount}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Pagination */}
