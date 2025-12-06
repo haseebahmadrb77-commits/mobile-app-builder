@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserStats } from "@/hooks/useUserLibrary";
 import {
   Settings,
   BookOpen,
@@ -34,6 +35,7 @@ const stats = {
 
 export default function Profile() {
   const { user, profile, signOut, updateProfile } = useAuth();
+  const { data: stats } = useUserStats();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -102,7 +104,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <Download className="mx-auto h-5 w-5 text-primary" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {stats.downloaded}
+                {stats?.downloaded || 0}
               </p>
               <p className="text-xs text-muted-foreground">Downloaded</p>
             </CardContent>
@@ -112,7 +114,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <Bookmark className="mx-auto h-5 w-5 text-secondary" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {stats.bookmarks}
+                {stats?.bookmarks || 0}
               </p>
               <p className="text-xs text-muted-foreground">Bookmarks</p>
             </CardContent>
@@ -122,7 +124,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <BookOpen className="mx-auto h-5 w-5 text-teal-600" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {stats.reading}
+                {stats?.reading || 0}
               </p>
               <p className="text-xs text-muted-foreground">Reading</p>
             </CardContent>

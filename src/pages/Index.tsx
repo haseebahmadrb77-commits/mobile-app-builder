@@ -4,29 +4,25 @@ import { CategoryCard } from "@/components/shared/CategoryCard";
 import { SearchBar } from "@/components/shared/SearchBar";
 import { FeaturedCarousel } from "@/components/shared/FeaturedCarousel";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Sparkles, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-
-// Mock data - will be replaced with Supabase data
-const featuredBooks = [
-  { id: "1", title: "The Book of Knowledge", author: "Imam Al-Ghazali", rating: 4.8, category: "Islamic" },
-  { id: "2", title: "Rumi's Poetry Collection", author: "Jalal ad-Din Rumi", rating: 4.9, category: "Poetry" },
-  { id: "3", title: "Tales of the Prophets", author: "Ibn Kathir", rating: 4.7, category: "Islamic" },
-  { id: "4", title: "The Sealed Nectar", author: "Safiur Rahman", rating: 4.9, category: "Biography" },
-];
-
-const recentBooks = [
-  { id: "5", title: "Introduction to Arabic", author: "Dr. V. Abdur Rahim", rating: 4.5, downloadCount: 1250 },
-  { id: "6", title: "Stories of the Sahaba", author: "Various Authors", rating: 4.6, downloadCount: 890 },
-  { id: "7", title: "Islamic Art & Calligraphy", author: "Mohamed Zakariya", rating: 4.4, downloadCount: 560 },
-  { id: "8", title: "Fortress of the Muslim", author: "Sa'id bin Wahf", rating: 4.8, downloadCount: 2100 },
-];
+import { useFeaturedBooks, usePopularBooks, useParentCategories } from "@/hooks/useBooks";
 
 export default function Index() {
   const navigate = useNavigate();
+  const { data: featuredBooks, isLoading: featuredLoading } = useFeaturedBooks(6);
+  const { data: recentBooks, isLoading: recentLoading } = usePopularBooks(8);
+  const { data: categories } = useParentCategories();
 
   const handleSearch = (query: string) => {
     navigate(`/search?q=${encodeURIComponent(query)}`);
+  };
+
+  // Map categories to icons
+  const categoryIcons: Record<string, typeof BookOpen> = {
+    general: BookOpen,
+    islamic: Sparkles,
   };
 
   return (
@@ -92,24 +88,39 @@ export default function Index() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <CategoryCard
-            id="general"
-            name="Books"
-            description="General literature, fiction, non-fiction, and more"
-            bookCount={2500}
-            icon={BookOpen}
-            variant="featured"
-            className="min-h-[140px]"
-          />
-          <CategoryCard
-            id="islamic"
-            name="Islamic Books"
-            description="Quran, Hadith, Fiqh, Tafsir, and Islamic sciences"
-            bookCount={2500}
-            icon={Sparkles}
-            variant="featured"
-            className="min-h-[140px] bg-gradient-to-br from-secondary to-secondary/80"
-          />
+          {categories?.map((category, index) => (
+            <CategoryCard
+              key={category.id}
+              id={category.slug}
+              name={category.name}
+              description={category.description || ""}
+              bookCount={category.book_count}
+              icon={categoryIcons[category.slug] || BookOpen}
+              variant="featured"
+              className={`min-h-[140px] ${index === 1 ? "bg-gradient-to-br from-secondary to-secondary/80" : ""}`}
+            />
+          )) || (
+            <>
+              <CategoryCard
+                id="general"
+                name="Books"
+                description="General literature, fiction, non-fiction, and more"
+                bookCount={0}
+                icon={BookOpen}
+                variant="featured"
+                className="min-h-[140px]"
+              />
+              <CategoryCard
+                id="islamic"
+                name="Islamic Books"
+                description="Quran, Hadith, Fiqh, Tafsir, and Islamic sciences"
+                bookCount={0}
+                icon={Sparkles}
+                variant="featured"
+                className="min-h-[140px] bg-gradient-to-br from-secondary to-secondary/80"
+              />
+            </>
+          )}
         </div>
       </section>
 
@@ -119,41 +130,88 @@ export default function Index() {
           <h2 className="font-display text-xl font-semibold text-foreground md:text-2xl">
             Featured Books
           </h2>
-          <Link to="/books/featured">
+          <Link to="/categories">
             <Button variant="ghost" size="sm" className="gap-1 text-primary">
               View All <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
 
-        <FeaturedCarousel books={featuredBooks} />
+        {featuredLoading ? (
+          <div className="flex gap-4 overflow-hidden">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="w-[200px] shrink-0 space-y-3">
+                <Skeleton className="h-[280px] w-full rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : featuredBooks && featuredBooks.length > 0 ? (
+          <FeaturedCarousel
+            books={featuredBooks.map((book) => ({
+              id: book.id,
+              title: book.title,
+              author: book.author,
+              rating: book.average_rating,
+              category: book.category?.name,
+              coverUrl: book.cover_url,
+            }))}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <BookOpen className="mx-auto h-12 w-12 text-muted-foreground/50" />
+            <p className="mt-4 text-muted-foreground">No books available yet</p>
+            <p className="text-sm text-muted-foreground/70">
+              Check back later for new additions
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Recent Additions */}
       <section className="container py-10">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="font-display text-xl font-semibold text-foreground md:text-2xl">
-            Recent Additions
+            Popular Books
           </h2>
-          <Link to="/books/recent">
+          <Link to="/categories">
             <Button variant="ghost" size="sm" className="gap-1 text-primary">
               View All <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-          {recentBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              id={book.id}
-              title={book.title}
-              author={book.author}
-              rating={book.rating}
-              downloadCount={book.downloadCount}
-            />
-          ))}
-        </div>
+        {recentLoading ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-3">
+                <Skeleton className="aspect-[3/4] w-full rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : recentBooks && recentBooks.length > 0 ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
+            {recentBooks.map((book) => (
+              <BookCard
+                key={book.id}
+                id={book.id}
+                title={book.title}
+                author={book.author}
+                rating={book.average_rating}
+                downloadCount={book.download_count}
+                coverUrl={book.cover_url}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <BookOpen className="mx-auto h-12 w-12 text-muted-foreground/50" />
+            <p className="mt-4 text-muted-foreground">No books available yet</p>
+          </div>
+        )}
       </section>
     </Layout>
   );
