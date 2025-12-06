@@ -22,64 +22,67 @@ import AdminBooks from "./pages/admin/Books";
 
 // Auth
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/categories" element={<Categories />} />
-          <Route path="/books/:category" element={<CategoryListing />} />
-          <Route path="/book/:id" element={<BookDetails />} />
-          <Route path="/search" element={<Search />} />
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/books/:category" element={<CategoryListing />} />
+            <Route path="/book/:id" element={<BookDetails />} />
+            <Route path="/search" element={<Search />} />
 
-          {/* Protected Routes */}
-          <Route path="/my-library" element={
-            <ProtectedRoute>
-              <MyLibrary />
-            </ProtectedRoute>
-          } />
-          <Route path="/bookmarks" element={
-            <ProtectedRoute>
-              <Bookmarks />
-            </ProtectedRoute>
-          } />
-          <Route path="/profile" element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          } />
+            {/* Protected Routes */}
+            <Route path="/my-library" element={
+              <ProtectedRoute>
+                <MyLibrary />
+              </ProtectedRoute>
+            } />
+            <Route path="/bookmarks" element={
+              <ProtectedRoute>
+                <Bookmarks />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
 
-          {/* Admin Routes */}
-          <Route path="/admin" element={
-            <ProtectedRoute requireAdmin>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/books" element={
-            <ProtectedRoute requireAdmin>
-              <AdminBooks />
-            </ProtectedRoute>
-          } />
+            {/* Admin Routes */}
+            <Route path="/admin" element={
+              <ProtectedRoute requireAdmin>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/books" element={
+              <ProtectedRoute requireAdmin>
+                <AdminBooks />
+              </ProtectedRoute>
+            } />
 
-          {/* Catch-all */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+            {/* Catch-all */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

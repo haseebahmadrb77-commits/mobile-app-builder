@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { LoadingPage } from "@/components/shared/LoadingSpinner";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -7,30 +9,21 @@ interface ProtectedRouteProps {
   requireAdmin?: boolean;
 }
 
-// TODO: Replace with actual auth state from Supabase
-const useAuth = () => {
-  return {
-    isAuthenticated: false,
-    isAdmin: false,
-    isLoading: false,
-  };
-};
-
-export function ProtectedRoute({ 
-  children, 
+export function ProtectedRoute({
+  children,
   requireAuth = true,
   requireAdmin = false,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, isAdmin, isLoading } = useAuth();
+  const { user, isAdmin, isLoading } = useAuth();
   const location = useLocation();
 
-  // Show nothing while checking auth status
+  // Show loading while checking auth status
   if (isLoading) {
-    return null;
+    return <LoadingPage text="Loading..." />;
   }
 
   // Redirect to login if not authenticated
-  if (requireAuth && !isAuthenticated) {
+  if (requireAuth && !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
