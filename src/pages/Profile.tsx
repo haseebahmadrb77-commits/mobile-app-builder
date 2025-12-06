@@ -1,9 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Settings,
   BookOpen,
@@ -15,28 +16,49 @@ import {
   HelpCircle,
   Shield,
 } from "lucide-react";
+import { toast } from "sonner";
 
-// Mock user data
-const user = {
-  name: "Guest User",
-  email: "guest@example.com",
-  avatarUrl: null,
-  joinDate: "December 2024",
-  stats: {
-    downloaded: 12,
-    bookmarks: 8,
-    reading: 3,
-  },
-};
-
-// Mock recent activity
+// Mock recent activity (will be replaced with real data later)
 const recentActivity = [
   { id: "1", action: "Downloaded", book: "The Book of Knowledge", time: "2 hours ago" },
   { id: "2", action: "Bookmarked", book: "Rumi's Poetry Collection", time: "5 hours ago" },
   { id: "3", action: "Started reading", book: "Tales of the Prophets", time: "1 day ago" },
 ];
 
+// Mock stats (will be replaced with real data later)
+const stats = {
+  downloaded: 12,
+  bookmarks: 8,
+  reading: 3,
+};
+
 export default function Profile() {
+  const { user, profile, signOut, updateProfile } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Signed out successfully");
+    navigate("/");
+  };
+
+  const handleProfileUpdate = async (data: { name: string }) => {
+    const { error } = await updateProfile({ display_name: data.name });
+    if (error) {
+      toast.error("Failed to update profile");
+    } else {
+      toast.success("Profile updated successfully");
+    }
+  };
+
+  const displayName = profile?.display_name || user?.email?.split("@")[0] || "User";
+  const joinDate = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      })
+    : "Recently";
+
   return (
     <Layout>
       <div className="container max-w-2xl py-6">
@@ -45,22 +67,29 @@ export default function Profile() {
           <CardContent className="p-6">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
               <Avatar className="h-24 w-24 ring-4 ring-primary/10">
-                <AvatarImage src={user.avatarUrl || undefined} />
+                <AvatarImage src={profile?.avatar_url || undefined} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
-                  {user.name.charAt(0)}
+                  {displayName.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="font-display text-xl font-semibold text-foreground">
-                  {user.name}
+                  {displayName}
                 </h1>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
+                <p className="text-sm text-muted-foreground">{user?.email}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Member since {user.joinDate}
+                  Member since {joinDate}
                 </p>
                 <div className="mt-3">
-                  <EditProfileDialog user={user} />
+                  <EditProfileDialog
+                    user={{
+                      name: displayName,
+                      email: user?.email || "",
+                      avatarUrl: profile?.avatar_url,
+                    }}
+                    onSave={handleProfileUpdate}
+                  />
                 </div>
               </div>
             </div>
@@ -73,7 +102,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <Download className="mx-auto h-5 w-5 text-primary" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {user.stats.downloaded}
+                {stats.downloaded}
               </p>
               <p className="text-xs text-muted-foreground">Downloaded</p>
             </CardContent>
@@ -83,7 +112,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <Bookmark className="mx-auto h-5 w-5 text-secondary" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {user.stats.bookmarks}
+                {stats.bookmarks}
               </p>
               <p className="text-xs text-muted-foreground">Bookmarks</p>
             </CardContent>
@@ -93,7 +122,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <BookOpen className="mx-auto h-5 w-5 text-teal-600" />
               <p className="mt-2 font-display text-2xl font-bold text-foreground">
-                {user.stats.reading}
+                {stats.reading}
               </p>
               <p className="text-xs text-muted-foreground">Reading</p>
             </CardContent>
@@ -193,7 +222,10 @@ export default function Profile() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer border-border/50 transition-colors hover:bg-destructive/5">
+          <Card
+            className="cursor-pointer border-border/50 transition-colors hover:bg-destructive/5"
+            onClick={handleSignOut}
+          >
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
                 <LogOut className="h-5 w-5 text-destructive" />
