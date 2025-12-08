@@ -1,44 +1,56 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { SearchBar } from "@/components/shared/SearchBar";
 import { BookCard } from "@/components/shared/BookCard";
-import { FilterSidebar } from "@/components/shared/FilterSidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search as SearchIcon, BookOpen, Sparkles } from "lucide-react";
+import { useSearch, usePopularSearches } from "@/hooks/useSearch";
+import { useParentCategories } from "@/hooks/useBooks";
 
-// Mock search results
-const mockResults = [
-  { id: "1", title: "The Book of Knowledge", author: "Imam Al-Ghazali", rating: 4.8, category: "Islamic" },
-  { id: "2", title: "Rumi's Poetry Collection", author: "Jalal ad-Din Rumi", rating: 4.9, category: "Poetry" },
-  { id: "3", title: "Tales of the Prophets", author: "Ibn Kathir", rating: 4.7, category: "Islamic" },
-];
-
-const popularSearches = ["Quran", "Hadith", "Rumi", "Al-Ghazali", "Fiqh", "Seerah"];
+type SortOption = 'relevance' | 'rating' | 'newest' | 'title' | 'downloads';
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
-  const [results, setResults] = useState(query ? mockResults : []);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
-  const [selectedYears, setSelectedYears] = useState<string[]>([]);
-  const [minRating, setMinRating] = useState(0);
+  const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [activeTab, setActiveTab] = useState("all");
+  
+  const { data: results, isLoading } = useSearch(query, { sortBy });
+  const { data: popularSearches = [] } = usePopularSearches();
+  const { data: categories } = useParentCategories();
 
   const handleSearch = (newQuery: string) => {
     setSearchParams({ q: newQuery });
-    // TODO: Implement actual search with Supabase
-    setResults(mockResults);
   };
 
-  const clearFilters = () => {
-    setSelectedAuthors([]);
-    setSelectedYears([]);
-    setMinRating(0);
-  };
+  // Filter results by category tab
+  const filteredResults = results?.filter(book => {
+    if (activeTab === "all") return true;
+    
+    const category = categories?.find(c => c.id === book.category_id);
+    if (activeTab === "islamic") {
+      return category?.slug === "islamic-books";
+    }
+    if (activeTab === "general") {
+      return category?.slug === "books";
+    }
+    return true;
+  }) || [];
+
+  const islamicCount = results?.filter(book => {
+    const category = categories?.find(c => c.id === book.category_id);
+    return category?.slug === "islamic-books";
+  }).length || 0;
+
+  const generalCount = results?.filter(book => {
+    const category = categories?.find(c => c.id === book.category_id);
+    return category?.slug === "books";
+  }).length || 0;
 
   return (
     <Layout>
@@ -70,87 +82,92 @@ export default function Search() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <TabsList>
                   <TabsTrigger value="all" className="gap-2">
-                    All <Badge variant="secondary" className="ml-1">{results.length}</Badge>
+                    All <Badge variant="secondary" className="ml-1">{results?.length || 0}</Badge>
                   </TabsTrigger>
                   <TabsTrigger value="general" className="gap-2">
-                    <BookOpen className="h-4 w-4" /> Books
+                    <BookOpen className="h-4 w-4" /> 
+                    Books
+                    <Badge variant="outline" className="ml-1">{generalCount}</Badge>
                   </TabsTrigger>
                   <TabsTrigger value="islamic" className="gap-2">
-                    <Sparkles className="h-4 w-4" /> Islamic
+                    <Sparkles className="h-4 w-4" /> 
+                    Islamic
+                    <Badge variant="outline" className="ml-1">{islamicCount}</Badge>
                   </TabsTrigger>
                 </TabsList>
 
-                <div className="flex items-center gap-2">
-                  <Select defaultValue="relevance">
-                    <SelectTrigger className="w-[160px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="relevance">Most Relevant</SelectItem>
-                      <SelectItem value="rating">Highest Rated</SelectItem>
-                      <SelectItem value="newest">Newest First</SelectItem>
-                      <SelectItem value="title">A-Z</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <FilterSidebar
-                    selectedAuthors={selectedAuthors}
-                    selectedYears={selectedYears}
-                    minRating={minRating}
-                    onAuthorChange={setSelectedAuthors}
-                    onYearChange={setSelectedYears}
-                    onRatingChange={setMinRating}
-                    onClearFilters={clearFilters}
-                  />
-                </div>
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="relevance">Most Relevant</SelectItem>
+                    <SelectItem value="rating">Highest Rated</SelectItem>
+                    <SelectItem value="downloads">Most Downloaded</SelectItem>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="title">A-Z</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <TabsContent value="all" className="mt-6">
-                <div className="flex gap-6">
-                  <FilterSidebar
-                    selectedAuthors={selectedAuthors}
-                    selectedYears={selectedYears}
-                    minRating={minRating}
-                    onAuthorChange={setSelectedAuthors}
-                    onYearChange={setSelectedYears}
-                    onRatingChange={setMinRating}
-                    onClearFilters={clearFilters}
-                    className="w-64 flex-shrink-0"
-                  />
-                  <div className="flex-1">
-                    {results.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                        {results.map((book) => (
-                          <BookCard
-                            key={book.id}
-                            id={book.id}
-                            title={book.title}
-                            author={book.author}
-                            rating={book.rating}
-                            category={book.category}
-                          />
-                        ))}
+                {isLoading ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {[...Array(10)].map((_, i) => (
+                      <div key={i} className="space-y-2">
+                        <Skeleton className="aspect-[3/4] w-full rounded-lg" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
                       </div>
-                    ) : (
-                      <div className="py-16 text-center">
-                        <p className="text-muted-foreground">No results found for "{query}"</p>
-                        <p className="mt-2 text-sm text-muted-foreground">Try different keywords or browse our categories</p>
-                      </div>
-                    )}
+                    ))}
                   </div>
-                </div>
+                ) : filteredResults.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {filteredResults.map((book) => (
+                      <BookCard
+                        key={book.id}
+                        id={book.id}
+                        title={book.title}
+                        author={book.author}
+                        rating={book.average_rating || 0}
+                        coverUrl={book.cover_url}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <p className="text-muted-foreground">No results found for "{query}"</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Try different keywords or browse our categories</p>
+                  </div>
+                )}
               </TabsContent>
+
               <TabsContent value="general" className="mt-6">
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                  {results.filter(b => b.category !== "Islamic").map((book) => (
-                    <BookCard key={book.id} {...book} />
+                  {filteredResults.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      id={book.id}
+                      title={book.title}
+                      author={book.author}
+                      rating={book.average_rating || 0}
+                      coverUrl={book.cover_url}
+                    />
                   ))}
                 </div>
               </TabsContent>
+
               <TabsContent value="islamic" className="mt-6">
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                  {results.filter(b => b.category === "Islamic").map((book) => (
-                    <BookCard key={book.id} {...book} />
+                  {filteredResults.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      id={book.id}
+                      title={book.title}
+                      author={book.author}
+                      rating={book.average_rating || 0}
+                      coverUrl={book.cover_url}
+                    />
                   ))}
                 </div>
               </TabsContent>
@@ -165,22 +182,24 @@ export default function Search() {
             <p className="mt-1 text-sm text-muted-foreground">Search by title, author, or topic</p>
             
             {/* Popular Searches */}
-            <div className="mt-6">
-              <p className="mb-3 text-sm font-medium text-foreground">Popular searches</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {popularSearches.map((term) => (
-                  <Button
-                    key={term}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSearch(term)}
-                    className="rounded-full"
-                  >
-                    {term}
-                  </Button>
-                ))}
+            {popularSearches.length > 0 && (
+              <div className="mt-6">
+                <p className="mb-3 text-sm font-medium text-foreground">Popular searches</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {popularSearches.map((term) => (
+                    <Button
+                      key={term}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSearch(term)}
+                      className="rounded-full"
+                    >
+                      {term}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
