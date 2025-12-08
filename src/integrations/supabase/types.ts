@@ -335,6 +335,26 @@ export type Database = {
         }
         Returns: boolean
       }
+      search_books: {
+        Args: { search_query: string }
+        Returns: {
+          author: string
+          average_rating: number
+          category_id: string
+          cover_url: string
+          description: string
+          download_count: number
+          id: string
+          pages: number
+          publication_year: number
+          rank: number
+          review_count: number
+          status: string
+          title: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

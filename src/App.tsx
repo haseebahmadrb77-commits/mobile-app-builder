@@ -24,6 +24,10 @@ import AdminBooks from "./pages/admin/Books";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
 
+// PWA
+import { InstallPrompt } from "./components/pwa/InstallPrompt";
+import { OfflineIndicator } from "./components/pwa/OfflineIndicator";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -81,6 +85,10 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        
+        {/* PWA Components */}
+        <InstallPrompt />
+        <OfflineIndicator />
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
