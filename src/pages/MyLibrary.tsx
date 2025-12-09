@@ -8,85 +8,158 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Search, Download, Clock, BookOpen, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
-
-// Mock library data
-const downloadedBooks = [
-  { 
-    id: "1", 
-    title: "The Book of Knowledge", 
-    author: "Imam Al-Ghazali", 
-    progress: 65,
-    lastRead: "2 hours ago"
-  },
-  { 
-    id: "2", 
-    title: "Rumi's Poetry Collection", 
-    author: "Jalal ad-Din Rumi", 
-    progress: 30,
-    lastRead: "Yesterday"
-  },
-  { 
-    id: "3", 
-    title: "Tales of the Prophets", 
-    author: "Ibn Kathir", 
-    progress: 0,
-    lastRead: undefined
-  },
-  { 
-    id: "4", 
-    title: "The Sealed Nectar", 
-    author: "Safiur Rahman", 
-    progress: 100,
-    lastRead: "Last week"
-  },
-];
-
-const recentlyRead = [
-  { 
-    id: "1", 
-    title: "The Book of Knowledge", 
-    author: "Imam Al-Ghazali", 
-    progress: 65,
-    lastRead: "2 hours ago"
-  },
-  { 
-    id: "2", 
-    title: "Rumi's Poetry Collection", 
-    author: "Jalal ad-Din Rumi", 
-    progress: 30,
-    lastRead: "Yesterday"
-  },
-];
+import { Link, useNavigate } from "react-router-dom";
+import { useUserLibrary, useRemoveFromLibrary, useReadingProgress } from "@/hooks/useUserLibrary";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { useAuth } from "@/contexts/AuthContext";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { formatDistanceToNow } from "date-fns";
 
 export default function MyLibrary() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  const { data: library = [], isLoading } = useUserLibrary();
+  const { data: allProgress = [] } = useReadingProgress();
+  const removeFromLibrary = useRemoveFromLibrary();
+  const { getSignedUrl } = useFileUpload();
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
 
-  const filteredDownloaded = downloadedBooks.filter(book =>
-    book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    book.author.toLowerCase().includes(searchQuery.toLowerCase())
+  // Redirect if not authenticated
+  if (!user) {
+    navigate("/login");
+    return null;
+  }
+
+  // Get progress for each book
+  const progressMap = new Map(
+    Array.isArray(allProgress) 
+      ? allProgress.map(p => [p.book_id, p]) 
+      : []
   );
 
-  const handleRemove = (bookTitle: string) => {
-    toast({
-      title: "Book removed",
-      description: `"${bookTitle}" has been removed from your library`,
-    });
-  };
+  const libraryWithProgress = library.map(item => ({
+    ...item,
+    progress: progressMap.get(item.book_id),
+  }));
 
-  const handleRead = (bookTitle: string) => {
-    toast({
-      title: "Opening book",
-      description: `Opening "${bookTitle}"...`,
-    });
-  };
+  const filteredLibrary = libraryWithProgress.filter(item =>
+    item.book?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.book?.author.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Sort library
+  const sortedLibrary = [...filteredLibrary].sort((a, b) => {
+    switch (sortBy) {
+      case "progress":
+        return (b.progress?.progress_percent || 0) - (a.progress?.progress_percent || 0);
+      case "title":
+        return (a.book?.title || "").localeCompare(b.book?.title || "");
+      case "author":
+        return (a.book?.author || "").localeCompare(b.book?.author || "");
+      default: // recent
+        return new Date(b.last_opened_at || b.downloaded_at).getTime() - 
+               new Date(a.last_opened_at || a.downloaded_at).getTime();
+    }
+  });
+
+  const recentlyRead = sortedLibrary.filter(item => item.last_opened_at);
+  const inProgress = sortedLibrary.filter(
+    item => (item.progress?.progress_percent || 0) > 0 && 
+            (item.progress?.progress_percent || 0) < 100
+  );
+  const completed = sortedLibrary.filter(
+    item => (item.progress?.progress_percent || 0) >= 100
+  );
 
   const stats = {
-    total: downloadedBooks.length,
-    inProgress: downloadedBooks.filter(b => b.progress > 0 && b.progress < 100).length,
-    completed: downloadedBooks.filter(b => b.progress === 100).length,
+    total: library.length,
+    inProgress: inProgress.length,
+    completed: completed.length,
+  };
+
+  const handleRemove = async (bookId: string, bookTitle: string) => {
+    try {
+      await removeFromLibrary.mutateAsync(bookId);
+      toast({
+        title: "Book removed",
+        description: `"${bookTitle}" has been removed from your library`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRead = async (bookId: string, fileUrl: string | null, bookTitle: string) => {
+    if (!fileUrl) {
+      toast({
+        title: "File not available",
+        description: "This book's file is not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const signedUrl = await getSignedUrl(fileUrl);
+      if (signedUrl) {
+        window.open(signedUrl, "_blank");
+        toast({
+          title: "Opening book",
+          description: `Opening "${bookTitle}"...`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <LoadingSpinner />
+        </div>
+      </Layout>
+    );
+  }
+
+  const renderBookGrid = (books: typeof sortedLibrary) => {
+    if (books.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {books.map((item) => (
+          <LibraryBookCard
+            key={item.id}
+            id={item.book_id}
+            title={item.book?.title || "Unknown"}
+            author={item.book?.author || "Unknown"}
+            progress={item.progress?.progress_percent || 0}
+            lastRead={item.last_opened_at 
+              ? formatDistanceToNow(new Date(item.last_opened_at), { addSuffix: true })
+              : undefined
+            }
+            coverUrl={item.book?.cover_url || undefined}
+            onRemove={() => handleRemove(item.book_id, item.book?.title || "Book")}
+            onRead={() => handleRead(item.book_id, item.book?.file_url || null, item.book?.title || "Book")}
+          />
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -168,7 +241,7 @@ export default function MyLibrary() {
           <TabsList>
             <TabsTrigger value="downloaded" className="gap-2">
               <Download className="h-4 w-4" />
-              All Books ({downloadedBooks.length})
+              All Books ({library.length})
             </TabsTrigger>
             <TabsTrigger value="recent" className="gap-2">
               <Clock className="h-4 w-4" />
@@ -181,21 +254,8 @@ export default function MyLibrary() {
           </TabsList>
 
           <TabsContent value="downloaded">
-            {filteredDownloaded.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {filteredDownloaded.map((book) => (
-                  <LibraryBookCard
-                    key={book.id}
-                    id={book.id}
-                    title={book.title}
-                    author={book.author}
-                    progress={book.progress}
-                    lastRead={book.lastRead}
-                    onRemove={() => handleRemove(book.title)}
-                    onRead={() => handleRead(book.title)}
-                  />
-                ))}
-              </div>
+            {sortedLibrary.length > 0 ? (
+              renderBookGrid(sortedLibrary)
             ) : searchQuery ? (
               <div className="py-16 text-center">
                 <p className="text-muted-foreground">No books found for "{searchQuery}"</p>
@@ -215,20 +275,7 @@ export default function MyLibrary() {
 
           <TabsContent value="recent">
             {recentlyRead.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {recentlyRead.map((book) => (
-                  <LibraryBookCard
-                    key={book.id}
-                    id={book.id}
-                    title={book.title}
-                    author={book.author}
-                    progress={book.progress}
-                    lastRead={book.lastRead}
-                    onRemove={() => handleRemove(book.title)}
-                    onRead={() => handleRead(book.title)}
-                  />
-                ))}
-              </div>
+              renderBookGrid(recentlyRead)
             ) : (
               <div className="py-16 text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
@@ -243,23 +290,8 @@ export default function MyLibrary() {
           </TabsContent>
 
           <TabsContent value="reading">
-            {downloadedBooks.filter(b => b.progress > 0 && b.progress < 100).length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {downloadedBooks
-                  .filter(b => b.progress > 0 && b.progress < 100)
-                  .map((book) => (
-                    <LibraryBookCard
-                      key={book.id}
-                      id={book.id}
-                      title={book.title}
-                      author={book.author}
-                      progress={book.progress}
-                      lastRead={book.lastRead}
-                      onRemove={() => handleRemove(book.title)}
-                      onRead={() => handleRead(book.title)}
-                    />
-                  ))}
-              </div>
+            {inProgress.length > 0 ? (
+              renderBookGrid(inProgress)
             ) : (
               <div className="py-16 text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">

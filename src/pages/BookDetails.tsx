@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { BookCard } from "@/components/shared/BookCard";
 import { ReviewCard } from "@/components/shared/ReviewCard";
@@ -9,96 +9,127 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
-import { Star, Download, Bookmark, BookmarkCheck, Share2, Calendar, User, BookOpen, FileText, MessageSquare } from "lucide-react";
+import { Star, Download, Bookmark, BookmarkCheck, Share2, Calendar, User, BookOpen, FileText, MessageSquare, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock book data
-const mockBook = {
-  id: "1",
-  title: "The Book of Knowledge",
-  author: "Imam Al-Ghazali",
-  description: "A comprehensive treatise on the importance of knowledge in Islam. This masterpiece explores the virtues of learning, the ethics of teaching, and the responsibilities that come with knowledge. Imam Al-Ghazali provides profound insights into the spiritual and practical aspects of pursuing knowledge.",
-  rating: 4.8,
-  reviewCount: 245,
-  category: "Islamic",
-  subcategory: "Spirituality",
-  publishYear: 1095,
-  pages: 320,
-  language: "Arabic/English",
-  downloadCount: 5420,
-  tableOfContents: [
-    "Chapter 1: The Excellence of Knowledge",
-    "Chapter 2: Types of Knowledge",
-    "Chapter 3: The Ethics of Learning",
-    "Chapter 4: The Ethics of Teaching",
-    "Chapter 5: The Intellect and Its Excellence",
-    "Chapter 6: Knowledge and Action",
-  ],
-};
-
-const mockReviews = [
-  {
-    id: "1",
-    userName: "Ahmad Hassan",
-    rating: 5,
-    date: "2 weeks ago",
-    comment: "An absolutely essential read for anyone seeking knowledge. Imam Al-Ghazali's insights are timeless and profound. The way he explains the relationship between knowledge and action is transformative.",
-    helpful: 24,
-  },
-  {
-    id: "2",
-    userName: "Fatima Ali",
-    rating: 5,
-    date: "1 month ago",
-    comment: "This book changed my perspective on learning. The chapter on ethics of teaching is particularly enlightening for educators.",
-    helpful: 18,
-  },
-  {
-    id: "3",
-    userName: "Muhammad Yusuf",
-    rating: 4,
-    date: "2 months ago",
-    comment: "A deep and scholarly work. Some sections require multiple readings to fully appreciate, but it's worth the effort.",
-    helpful: 12,
-  },
-];
-
-const relatedBooks = [
-  { id: "2", title: "Ihya Ulum al-Din", author: "Imam Al-Ghazali", rating: 4.9 },
-  { id: "3", title: "The Alchemy of Happiness", author: "Imam Al-Ghazali", rating: 4.7 },
-  { id: "4", title: "Deliverance from Error", author: "Imam Al-Ghazali", rating: 4.6 },
-  { id: "5", title: "The Path to Guidance", author: "Imam Al-Ghazali", rating: 4.5 },
-];
+import { useBook, useBooks } from "@/hooks/useBooks";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAddBookmark, useRemoveBookmark, useIsBookmarked, useAddToLibrary, useIsInLibrary } from "@/hooks/useUserLibrary";
+import { useBookReviews, useCreateReview } from "@/hooks/useReviews";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { ErrorMessage } from "@/components/shared/ErrorMessage";
 
 export default function BookDetails() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { toast } = useToast();
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const { user } = useAuth();
+  
+  const { data: book, isLoading, error } = useBook(id || "");
+  const { data: reviews = [], isLoading: reviewsLoading } = useBookReviews(id || "");
+  const { data: relatedBooks = [] } = useBooks({ 
+    categoryId: book?.category_id || undefined, 
+    limit: 4,
+    status: "published" 
+  });
+  
+  const { data: isBookmarked = false } = useIsBookmarked(id || "");
+  const { data: isInLibrary = false } = useIsInLibrary(id || "");
+  
+  const addBookmark = useAddBookmark();
+  const removeBookmark = useRemoveBookmark();
+  const addToLibrary = useAddToLibrary();
+  const createReview = useCreateReview();
+  const { getSignedUrl } = useFileUpload();
+  
   const [userRating, setUserRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
-    toast({
-      title: isBookmarked ? "Removed from bookmarks" : "Added to bookmarks",
-      description: isBookmarked 
-        ? "Book removed from your bookmarks" 
-        : "Book saved to your bookmarks for later",
-    });
+  const handleBookmark = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to bookmark books",
+      });
+      navigate("/login");
+      return;
+    }
+
+    try {
+      if (isBookmarked) {
+        await removeBookmark.mutateAsync(id!);
+        toast({
+          title: "Removed from bookmarks",
+          description: "Book removed from your bookmarks",
+        });
+      } else {
+        await addBookmark.mutateAsync(id!);
+        toast({
+          title: "Added to bookmarks",
+          description: "Book saved to your bookmarks for later",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDownload = () => {
-    toast({
-      title: "Sign in required",
-      description: "Please sign in to download this book",
-    });
+  const handleDownload = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to download this book",
+      });
+      navigate("/login");
+      return;
+    }
+
+    if (!book?.file_url) {
+      toast({
+        title: "File not available",
+        description: "This book's file is not available for download",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // Add to library if not already there
+      if (!isInLibrary) {
+        await addToLibrary.mutateAsync(id!);
+      }
+
+      // Get signed URL and download
+      const signedUrl = await getSignedUrl(book.file_url);
+      if (signedUrl) {
+        window.open(signedUrl, "_blank");
+        toast({
+          title: "Download started",
+          description: `Downloading "${book.title}"...`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleShare = async () => {
     try {
       await navigator.share({
-        title: mockBook.title,
-        text: `Check out "${mockBook.title}" by ${mockBook.author}`,
+        title: book?.title,
+        text: `Check out "${book?.title}" by ${book?.author}`,
         url: window.location.href,
       });
     } catch {
@@ -110,7 +141,16 @@ export default function BookDetails() {
     }
   };
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to submit a review",
+      });
+      navigate("/login");
+      return;
+    }
+
     if (!userRating || !reviewText.trim()) {
       toast({
         title: "Incomplete review",
@@ -119,13 +159,52 @@ export default function BookDetails() {
       });
       return;
     }
-    toast({
-      title: "Review submitted",
-      description: "Thank you for your feedback!",
-    });
-    setUserRating(0);
-    setReviewText("");
+
+    try {
+      await createReview.mutateAsync({
+        bookId: id!,
+        rating: userRating,
+        content: reviewText,
+      });
+      toast({
+        title: "Review submitted",
+        description: "Thank you for your feedback!",
+      });
+      setUserRating(0);
+      setReviewText("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <LoadingSpinner />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error || !book) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <ErrorMessage 
+            title="Book not found" 
+            message="The book you're looking for doesn't exist or has been removed."
+          />
+        </div>
+      </Layout>
+    );
+  }
+
+  const filteredRelatedBooks = relatedBooks.filter(b => b.id !== book.id).slice(0, 4);
 
   return (
     <Layout>
@@ -140,13 +219,19 @@ export default function BookDetails() {
             <BreadcrumbItem>
               <BreadcrumbLink href="/categories">Categories</BreadcrumbLink>
             </BreadcrumbItem>
+            {book.category && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbLink href={`/books/${book.category.slug}`}>
+                    {book.category.name}
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+              </>
+            )}
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbLink href="/books/islamic">Islamic Books</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{mockBook.title}</BreadcrumbPage>
+              <BreadcrumbPage>{book.title}</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -157,22 +242,39 @@ export default function BookDetails() {
           <div className="lg:col-span-1">
             <Card className="overflow-hidden border-border/50 sticky top-20">
               <div className="aspect-[3/4] bg-gradient-to-br from-primary/20 to-secondary/20">
-                <div className="flex h-full items-center justify-center">
-                  <span className="font-display text-6xl text-muted-foreground/30">
-                    {mockBook.title.charAt(0)}
-                  </span>
-                </div>
+                {book.cover_url ? (
+                  <img 
+                    src={book.cover_url} 
+                    alt={book.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <span className="font-display text-6xl text-muted-foreground/30">
+                      {book.title.charAt(0)}
+                    </span>
+                  </div>
+                )}
               </div>
               <CardContent className="p-4 space-y-3">
-                <Button onClick={handleDownload} className="w-full gap-2">
-                  <Download className="h-4 w-4" />
-                  Download Book
+                <Button 
+                  onClick={handleDownload} 
+                  className="w-full gap-2"
+                  disabled={isDownloading || !book.file_url}
+                >
+                  {isDownloading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {isInLibrary ? "Download Again" : "Download Book"}
                 </Button>
                 <div className="flex gap-2">
                   <Button 
                     variant={isBookmarked ? "secondary" : "outline"} 
                     className="flex-1 gap-2"
                     onClick={handleBookmark}
+                    disabled={addBookmark.isPending || removeBookmark.isPending}
                   >
                     {isBookmarked ? (
                       <BookmarkCheck className="h-4 w-4" />
@@ -192,16 +294,18 @@ export default function BookDetails() {
           {/* Details */}
           <div className="lg:col-span-2">
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{mockBook.category}</Badge>
-              <Badge variant="outline">{mockBook.subcategory}</Badge>
+              {book.category && (
+                <Badge variant="secondary">{book.category.name}</Badge>
+              )}
+              <Badge variant="outline">{book.language || "English"}</Badge>
             </div>
 
             <h1 className="font-display text-2xl font-bold text-foreground md:text-3xl">
-              {mockBook.title}
+              {book.title}
             </h1>
 
             <p className="mt-2 text-lg text-muted-foreground">
-              by {mockBook.author}
+              by {book.author}
             </p>
 
             {/* Rating */}
@@ -211,49 +315,49 @@ export default function BookDetails() {
                   <Star
                     key={i}
                     className={`h-5 w-5 ${
-                      i < Math.floor(mockBook.rating)
+                      i < Math.floor(book.average_rating || 0)
                         ? "fill-secondary text-secondary"
                         : "text-muted"
                     }`}
                   />
                 ))}
               </div>
-              <span className="font-medium">{mockBook.rating}</span>
+              <span className="font-medium">{book.average_rating?.toFixed(1) || "0.0"}</span>
               <span className="text-muted-foreground">
-                ({mockBook.reviewCount} reviews)
+                ({book.review_count || 0} reviews)
               </span>
             </div>
 
             {/* Metadata */}
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>{mockBook.publishYear}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                <span>{mockBook.pages} pages</span>
-              </div>
+              {book.publication_year && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span>{book.publication_year}</span>
+                </div>
+              )}
+              {book.pages && (
+                <div className="flex items-center gap-2 text-sm">
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  <span>{book.pages} pages</span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm">
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span>{mockBook.language}</span>
+                <span>{book.language || "English"}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Download className="h-4 w-4 text-muted-foreground" />
-                <span>{mockBook.downloadCount.toLocaleString()}</span>
+                <span>{(book.download_count || 0).toLocaleString()}</span>
               </div>
             </div>
 
-            {/* Tabs for Description, Contents, Reviews */}
+            {/* Tabs for Description, Reviews */}
             <Tabs defaultValue="description" className="mt-8">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="description" className="gap-2">
                   <FileText className="h-4 w-4" />
                   <span className="hidden sm:inline">Description</span>
-                </TabsTrigger>
-                <TabsTrigger value="contents" className="gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  <span className="hidden sm:inline">Contents</span>
                 </TabsTrigger>
                 <TabsTrigger value="reviews" className="gap-2">
                   <MessageSquare className="h-4 w-4" />
@@ -265,28 +369,8 @@ export default function BookDetails() {
                 <Card className="border-border/50">
                   <CardContent className="p-6">
                     <p className="text-muted-foreground leading-relaxed">
-                      {mockBook.description}
+                      {book.description || "No description available."}
                     </p>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="contents" className="mt-4">
-                <Card className="border-border/50">
-                  <CardHeader>
-                    <CardTitle className="text-lg">Table of Contents</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <ol className="space-y-2">
-                      {mockBook.tableOfContents.map((chapter, index) => (
-                        <li key={index} className="flex items-center gap-3 text-sm">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                            {index + 1}
-                          </span>
-                          <span className="text-muted-foreground">{chapter}</span>
-                        </li>
-                      ))}
-                    </ol>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -324,7 +408,12 @@ export default function BookDetails() {
                       onChange={(e) => setReviewText(e.target.value)}
                       rows={3}
                     />
-                    <Button onClick={handleSubmitReview}>Submit Review</Button>
+                    <Button 
+                      onClick={handleSubmitReview}
+                      disabled={createReview.isPending}
+                    >
+                      {createReview.isPending ? "Submitting..." : "Submit Review"}
+                    </Button>
                   </CardContent>
                 </Card>
 
@@ -332,16 +421,28 @@ export default function BookDetails() {
                 <Card className="border-border/50">
                   <CardHeader>
                     <CardTitle className="text-lg">
-                      Reader Reviews ({mockReviews.length})
+                      Reader Reviews ({reviews.length})
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {mockReviews.map((review) => (
-                      <ReviewCard key={review.id} {...review} />
-                    ))}
-                    <Button variant="outline" className="w-full">
-                      Load More Reviews
-                    </Button>
+                    {reviewsLoading ? (
+                      <LoadingSpinner />
+                    ) : reviews.length > 0 ? (
+                      reviews.map((review) => (
+                        <ReviewCard
+                          key={review.id}
+                          id={review.id}
+                          userName={review.profile?.display_name || "Anonymous"}
+                          rating={review.rating}
+                          date={new Date(review.created_at).toLocaleDateString()}
+                          comment={review.content || ""}
+                        />
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground text-center py-4">
+                        No reviews yet. Be the first to review!
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -350,22 +451,26 @@ export default function BookDetails() {
         </div>
 
         {/* Related Books */}
-        <section className="mt-12">
-          <h2 className="mb-4 font-display text-xl font-semibold text-foreground">
-            Related Books
-          </h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {relatedBooks.map((book) => (
-              <BookCard
-                key={book.id}
-                id={book.id}
-                title={book.title}
-                author={book.author}
-                rating={book.rating}
-              />
-            ))}
-          </div>
-        </section>
+        {filteredRelatedBooks.length > 0 && (
+          <section className="mt-12">
+            <h2 className="mb-4 font-display text-xl font-semibold text-foreground">
+              Related Books
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {filteredRelatedBooks.map((relatedBook) => (
+                <BookCard
+                  key={relatedBook.id}
+                  id={relatedBook.id}
+                  title={relatedBook.title}
+                  author={relatedBook.author}
+                  rating={relatedBook.average_rating || 0}
+                  coverUrl={relatedBook.cover_url || undefined}
+                  category={relatedBook.category?.name}
+                />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </Layout>
   );
