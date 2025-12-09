@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AddBookDialog } from "@/components/admin/AddBookDialog";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
   Search,
   Edit,
@@ -36,77 +37,59 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const mockBooks = [
-  {
-    id: "1",
-    title: "The Book of Knowledge",
-    author: "Imam Al-Ghazali",
-    category: "Islamic",
-    status: "published",
-    downloads: 1234,
-    createdAt: "2024-01-15",
-  },
-  {
-    id: "2",
-    title: "Rumi's Poetry Collection",
-    author: "Jalal ad-Din Rumi",
-    category: "Poetry",
-    status: "published",
-    downloads: 987,
-    createdAt: "2024-01-12",
-  },
-  {
-    id: "3",
-    title: "Tales of the Prophets",
-    author: "Ibn Kathir",
-    category: "Islamic",
-    status: "draft",
-    downloads: 0,
-    createdAt: "2024-01-10",
-  },
-  {
-    id: "4",
-    title: "The Art of Living",
-    author: "Thich Nhat Hanh",
-    category: "Self-Help",
-    status: "published",
-    downloads: 654,
-    createdAt: "2024-01-08",
-  },
-  {
-    id: "5",
-    title: "Introduction to Fiqh",
-    author: "Various Authors",
-    category: "Islamic",
-    status: "draft",
-    downloads: 0,
-    createdAt: "2024-01-05",
-  },
-];
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useBooks, useDeleteBook, useUpdateBook, useCategories } from "@/hooks/useBooks";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminBooks() {
+  const { toast } = useToast();
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bookToDelete, setBookToDelete] = useState<string | null>(null);
+  const booksPerPage = 10;
 
-  const filteredBooks = mockBooks.filter((book) => {
-    const matchesSearch =
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: books = [], isLoading } = useBooks({
+    search: searchQuery || undefined,
+    sortBy: "created_at",
+    sortOrder: "desc",
+  });
+  const { data: categories = [] } = useCategories();
+  const deleteBook = useDeleteBook();
+  const updateBook = useUpdateBook();
+
+  const filteredBooks = books.filter((book) => {
     const matchesCategory =
-      categoryFilter === "all" || book.category === categoryFilter;
+      categoryFilter === "all" || book.category?.name === categoryFilter;
     const matchesStatus =
       statusFilter === "all" || book.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesCategory && matchesStatus;
   });
 
+  // Pagination
+  const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
+  const paginatedBooks = filteredBooks.slice(
+    (currentPage - 1) * booksPerPage,
+    currentPage * booksPerPage
+  );
+
   const toggleSelectAll = () => {
-    if (selectedBooks.length === filteredBooks.length) {
+    if (selectedBooks.length === paginatedBooks.length) {
       setSelectedBooks([]);
     } else {
-      setSelectedBooks(filteredBooks.map((b) => b.id));
+      setSelectedBooks(paginatedBooks.map((b) => b.id));
     }
   };
 
@@ -115,6 +98,73 @@ export default function AdminBooks() {
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteBook.mutateAsync(id);
+      toast({
+        title: "Book deleted",
+        description: "The book has been deleted successfully",
+      });
+      setSelectedBooks(prev => prev.filter(bookId => bookId !== id));
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+    setDeleteDialogOpen(false);
+    setBookToDelete(null);
+  };
+
+  const handleBulkPublish = async () => {
+    try {
+      await Promise.all(
+        selectedBooks.map(id => updateBook.mutateAsync({ id, status: "published" }))
+      );
+      toast({
+        title: "Books published",
+        description: `${selectedBooks.length} books have been published`,
+      });
+      setSelectedBooks([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      await Promise.all(selectedBooks.map(id => deleteBook.mutateAsync(id)));
+      toast({
+        title: "Books deleted",
+        description: `${selectedBooks.length} books have been deleted`,
+      });
+      setSelectedBooks([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const uniqueCategories = [...new Set(books.map(b => b.category?.name).filter(Boolean))];
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <LoadingSpinner />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -141,26 +191,34 @@ export default function AdminBooks() {
               placeholder="Search by title or author..."
               className="pl-10"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
           <div className="flex gap-2">
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <Select value={categoryFilter} onValueChange={(val) => {
+              setCategoryFilter(val);
+              setCurrentPage(1);
+            }}>
               <SelectTrigger className="w-[140px]">
                 <Filter className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="Islamic">Islamic</SelectItem>
-                <SelectItem value="Poetry">Poetry</SelectItem>
-                <SelectItem value="Self-Help">Self-Help</SelectItem>
-                <SelectItem value="Fiction">Fiction</SelectItem>
+                {uniqueCategories.map(cat => (
+                  <SelectItem key={cat} value={cat!}>{cat}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(val) => {
+              setStatusFilter(val);
+              setCurrentPage(1);
+            }}>
               <SelectTrigger className="w-[120px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -179,10 +237,20 @@ export default function AdminBooks() {
             <span className="text-sm text-muted-foreground">
               {selectedBooks.length} book(s) selected
             </span>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleBulkPublish}
+              disabled={updateBook.isPending}
+            >
               Publish Selected
             </Button>
-            <Button variant="destructive" size="sm">
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={handleBulkDelete}
+              disabled={deleteBook.isPending}
+            >
               Delete Selected
             </Button>
           </div>
@@ -196,8 +264,8 @@ export default function AdminBooks() {
                 <TableHead className="w-12">
                   <Checkbox
                     checked={
-                      selectedBooks.length === filteredBooks.length &&
-                      filteredBooks.length > 0
+                      selectedBooks.length === paginatedBooks.length &&
+                      paginatedBooks.length > 0
                     }
                     onCheckedChange={toggleSelectAll}
                   />
@@ -211,54 +279,72 @@ export default function AdminBooks() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBooks.map((book) => (
-                <TableRow key={book.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedBooks.includes(book.id)}
-                      onCheckedChange={() => toggleSelectBook(book.id)}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{book.title}</TableCell>
-                  <TableCell>{book.author}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{book.category}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        book.status === "published" ? "default" : "secondary"
-                      }
-                    >
-                      {book.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {book.downloads.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {paginatedBooks.length > 0 ? (
+                paginatedBooks.map((book) => (
+                  <TableRow key={book.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedBooks.includes(book.id)}
+                        onCheckedChange={() => toggleSelectBook(book.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{book.title}</TableCell>
+                    <TableCell>{book.author}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{book.category?.name || "Uncategorized"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          book.status === "published" ? "default" : "secondary"
+                        }
+                      >
+                        {book.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(book.download_count || 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a href={`/book/${book.id}`} target="_blank" rel="noopener noreferrer">
+                              View Details
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => {
+                              setBookToDelete(book.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <p className="text-muted-foreground">No books found</p>
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </div>
@@ -266,26 +352,63 @@ export default function AdminBooks() {
         {/* Pagination */}
         <div className="mt-4 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {filteredBooks.length} of {mockBooks.length} books
+            Showing {paginatedBooks.length} of {filteredBooks.length} books
           </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" disabled>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm">
-              1
-            </Button>
-            <Button variant="ghost" size="sm">
-              2
-            </Button>
-            <Button variant="ghost" size="sm">
-              3
-            </Button>
-            <Button variant="outline" size="icon">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const page = i + 1;
+                return (
+                  <Button 
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"} 
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                );
+              })}
+              <Button 
+                variant="outline" 
+                size="icon"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Book</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this book? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => bookToDelete && handleDelete(bookToDelete)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );

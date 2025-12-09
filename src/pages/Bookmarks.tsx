@@ -6,81 +6,151 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Bookmark, Search, Trash2, Download } from "lucide-react";
+import { Bookmark, Search, Trash2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
-
-// Mock bookmarks data
-const initialBookmarks = [
-  { id: "1", title: "The Book of Knowledge", author: "Imam Al-Ghazali", rating: 4.8, category: "Islamic", dateAdded: "2 days ago" },
-  { id: "2", title: "Rumi's Poetry Collection", author: "Jalal ad-Din Rumi", rating: 4.9, category: "Poetry", dateAdded: "1 week ago" },
-  { id: "3", title: "Tales of the Prophets", author: "Ibn Kathir", rating: 4.7, category: "Islamic", dateAdded: "2 weeks ago" },
-  { id: "4", title: "The Sealed Nectar", author: "Safiur Rahman", rating: 4.9, category: "Biography", dateAdded: "3 weeks ago" },
-  { id: "5", title: "Introduction to Arabic", author: "Dr. V. Abdur Rahim", rating: 4.5, category: "Education", dateAdded: "1 month ago" },
-];
+import { Link, useNavigate } from "react-router-dom";
+import { useUserBookmarks, useRemoveBookmark, useAddToLibrary } from "@/hooks/useUserLibrary";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { useAuth } from "@/contexts/AuthContext";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { formatDistanceToNow } from "date-fns";
 
 export default function Bookmarks() {
   const { toast } = useToast();
-  const [bookmarks, setBookmarks] = useState(initialBookmarks);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  const { data: bookmarks = [], isLoading } = useUserBookmarks();
+  const removeBookmark = useRemoveBookmark();
+  const addToLibrary = useAddToLibrary();
+  const { getSignedUrl } = useFileUpload();
+  
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const filteredBookmarks = bookmarks.filter(book =>
-    book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    book.author.toLowerCase().includes(searchQuery.toLowerCase())
+  // Redirect if not authenticated
+  if (!user) {
+    navigate("/login");
+    return null;
+  }
+
+  const filteredBookmarks = bookmarks.filter(bookmark =>
+    bookmark.book?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    bookmark.book?.author.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const isAllSelected = filteredBookmarks.length > 0 && selectedIds.length === filteredBookmarks.length;
+  // Sort bookmarks
+  const sortedBookmarks = [...filteredBookmarks].sort((a, b) => {
+    switch (sortBy) {
+      case "title":
+        return (a.book?.title || "").localeCompare(b.book?.title || "");
+      case "rating":
+        return (b.book?.average_rating || 0) - (a.book?.average_rating || 0);
+      case "category":
+        return (a.book?.category?.name || "").localeCompare(b.book?.category?.name || "");
+      default: // recent
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
+
+  const isAllSelected = sortedBookmarks.length > 0 && selectedIds.length === sortedBookmarks.length;
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(filteredBookmarks.map(b => b.id));
+      setSelectedIds(sortedBookmarks.map(b => b.book_id));
     } else {
       setSelectedIds([]);
     }
   };
 
-  const handleSelect = (id: string, selected: boolean) => {
+  const handleSelect = (bookId: string, selected: boolean) => {
     if (selected) {
-      setSelectedIds([...selectedIds, id]);
+      setSelectedIds([...selectedIds, bookId]);
     } else {
-      setSelectedIds(selectedIds.filter(i => i !== id));
+      setSelectedIds(selectedIds.filter(i => i !== bookId));
     }
   };
 
-  const handleRemove = (id: string) => {
-    const book = bookmarks.find(b => b.id === id);
-    setBookmarks(bookmarks.filter(b => b.id !== id));
-    setSelectedIds(selectedIds.filter(i => i !== id));
-    toast({
-      title: "Bookmark removed",
-      description: `"${book?.title}" removed from bookmarks`,
-    });
+  const handleRemove = async (bookId: string) => {
+    const bookmark = bookmarks.find(b => b.book_id === bookId);
+    try {
+      await removeBookmark.mutateAsync(bookId);
+      setSelectedIds(selectedIds.filter(i => i !== bookId));
+      toast({
+        title: "Bookmark removed",
+        description: `"${bookmark?.book?.title}" removed from bookmarks`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRemoveSelected = () => {
-    setBookmarks(bookmarks.filter(b => !selectedIds.includes(b.id)));
-    toast({
-      title: "Bookmarks removed",
-      description: `${selectedIds.length} bookmarks removed`,
-    });
-    setSelectedIds([]);
+  const handleRemoveSelected = async () => {
+    try {
+      await Promise.all(selectedIds.map(id => removeBookmark.mutateAsync(id)));
+      toast({
+        title: "Bookmarks removed",
+        description: `${selectedIds.length} bookmarks removed`,
+      });
+      setSelectedIds([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDownload = (bookTitle: string) => {
-    toast({
-      title: "Download started",
-      description: `Downloading "${bookTitle}"...`,
-    });
+  const handleDownload = async (bookId: string, fileUrl: string | null, title: string) => {
+    if (!fileUrl) {
+      toast({
+        title: "File not available",
+        description: "This book's file is not available for download",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDownloadingId(bookId);
+    try {
+      await addToLibrary.mutateAsync(bookId);
+      const signedUrl = await getSignedUrl(fileUrl);
+      if (signedUrl) {
+        window.open(signedUrl, "_blank");
+        toast({
+          title: "Download started",
+          description: `Downloading "${title}"...`,
+        });
+      }
+    } catch (error: any) {
+      if (!error.message.includes("already in library")) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
-  const handleDownloadSelected = () => {
-    toast({
-      title: "Downloads started",
-      description: `Downloading ${selectedIds.length} books...`,
-    });
-  };
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <LoadingSpinner />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -116,15 +186,6 @@ export default function Bookmarks() {
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleDownloadSelected}
-                  className="gap-1"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-1 text-destructive">
@@ -176,21 +237,27 @@ export default function Bookmarks() {
         </div>
 
         {/* Bookmarks Grid */}
-        {filteredBookmarks.length > 0 ? (
+        {sortedBookmarks.length > 0 ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {filteredBookmarks.map((book) => (
+            {sortedBookmarks.map((bookmark) => (
               <BookmarkCard
-                key={book.id}
-                id={book.id}
-                title={book.title}
-                author={book.author}
-                rating={book.rating}
-                category={book.category}
-                dateAdded={book.dateAdded}
-                isSelected={selectedIds.includes(book.id)}
-                onSelect={(selected) => handleSelect(book.id, selected)}
-                onRemove={() => handleRemove(book.id)}
-                onDownload={() => handleDownload(book.title)}
+                key={bookmark.id}
+                id={bookmark.book_id}
+                title={bookmark.book?.title || "Unknown"}
+                author={bookmark.book?.author || "Unknown"}
+                rating={bookmark.book?.average_rating || 0}
+                category={bookmark.book?.category?.name}
+                dateAdded={formatDistanceToNow(new Date(bookmark.created_at), { addSuffix: true })}
+                coverUrl={bookmark.book?.cover_url || undefined}
+                isSelected={selectedIds.includes(bookmark.book_id)}
+                onSelect={(selected) => handleSelect(bookmark.book_id, selected)}
+                onRemove={() => handleRemove(bookmark.book_id)}
+                onDownload={() => handleDownload(
+                  bookmark.book_id, 
+                  bookmark.book?.file_url || null, 
+                  bookmark.book?.title || "Book"
+                )}
+                isDownloading={downloadingId === bookmark.book_id}
               />
             ))}
           </div>
