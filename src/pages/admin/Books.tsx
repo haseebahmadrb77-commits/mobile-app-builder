@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AddBookDialog } from "@/components/admin/AddBookDialog";
+import { EditBookDialog } from "@/components/admin/EditBookDialog";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
   Search,
@@ -29,6 +30,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  ExternalLink,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -47,8 +51,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useBooks, useDeleteBook, useUpdateBook, useCategories } from "@/hooks/useBooks";
+import { useBooks, useDeleteBook, useUpdateBook } from "@/hooks/useBooks";
 import { useToast } from "@/hooks/use-toast";
+
+interface Book {
+  id: string;
+  title: string;
+  author: string;
+  description?: string | null;
+  category_id?: string | null;
+  category?: { name: string; slug: string } | null;
+  publisher?: string | null;
+  publication_year?: number | null;
+  isbn?: string | null;
+  pages?: number | null;
+  language?: string | null;
+  status: string;
+  cover_url?: string | null;
+  file_url?: string | null;
+  download_count?: number | null;
+  average_rating?: number | null;
+}
 
 export default function AdminBooks() {
   const { toast } = useToast();
@@ -59,6 +82,8 @@ export default function AdminBooks() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [bookToEdit, setBookToEdit] = useState<Book | null>(null);
   const booksPerPage = 10;
 
   const { data: books = [], isLoading } = useBooks({
@@ -66,7 +91,6 @@ export default function AdminBooks() {
     sortBy: "created_at",
     sortOrder: "desc",
   });
-  const { data: categories = [] } = useCategories();
   const deleteBook = useDeleteBook();
   const updateBook = useUpdateBook();
 
@@ -118,6 +142,23 @@ export default function AdminBooks() {
     setBookToDelete(null);
   };
 
+  const handleToggleStatus = async (book: Book) => {
+    const newStatus = book.status === "published" ? "draft" : "published";
+    try {
+      await updateBook.mutateAsync({ id: book.id, status: newStatus });
+      toast({
+        title: newStatus === "published" ? "Book published" : "Book unpublished",
+        description: `"${book.title}" is now ${newStatus}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleBulkPublish = async () => {
     try {
       await Promise.all(
@@ -126,6 +167,25 @@ export default function AdminBooks() {
       toast({
         title: "Books published",
         description: `${selectedBooks.length} books have been published`,
+      });
+      setSelectedBooks([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkUnpublish = async () => {
+    try {
+      await Promise.all(
+        selectedBooks.map(id => updateBook.mutateAsync({ id, status: "draft" }))
+      );
+      toast({
+        title: "Books unpublished",
+        description: `${selectedBooks.length} books have been set to draft`,
       });
       setSelectedBooks([]);
     } catch (error: any) {
@@ -154,6 +214,11 @@ export default function AdminBooks() {
     }
   };
 
+  const handleEdit = (book: Book) => {
+    setBookToEdit(book);
+    setEditDialogOpen(true);
+  };
+
   const uniqueCategories = [...new Set(books.map(b => b.category?.name).filter(Boolean))];
 
   if (isLoading) {
@@ -176,7 +241,7 @@ export default function AdminBooks() {
               Manage Books
             </h1>
             <p className="mt-2 text-muted-foreground">
-              Add, edit, or remove books from the library
+              Add, edit, or remove books from the library using Google Drive links
             </p>
           </div>
 
@@ -233,7 +298,7 @@ export default function AdminBooks() {
 
         {/* Bulk Actions */}
         {selectedBooks.length > 0 && (
-          <div className="mb-4 flex items-center gap-4 rounded-lg bg-muted/50 p-3">
+          <div className="mb-4 flex items-center gap-2 flex-wrap rounded-lg bg-muted/50 p-3">
             <span className="text-sm text-muted-foreground">
               {selectedBooks.length} book(s) selected
             </span>
@@ -242,22 +307,36 @@ export default function AdminBooks() {
               size="sm" 
               onClick={handleBulkPublish}
               disabled={updateBook.isPending}
+              className="gap-1"
             >
-              Publish Selected
+              <Eye className="h-3.5 w-3.5" />
+              Publish
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleBulkUnpublish}
+              disabled={updateBook.isPending}
+              className="gap-1"
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              Unpublish
             </Button>
             <Button 
               variant="destructive" 
               size="sm" 
               onClick={handleBulkDelete}
               disabled={deleteBook.isPending}
+              className="gap-1"
             >
-              Delete Selected
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
             </Button>
           </div>
         )}
 
         {/* Books Table */}
-        <div className="rounded-lg border border-border/50">
+        <div className="rounded-lg border border-border/50 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -270,8 +349,8 @@ export default function AdminBooks() {
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Author</TableHead>
+                <TableHead className="min-w-[200px]">Title</TableHead>
+                <TableHead className="min-w-[120px]">Author</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Downloads</TableHead>
@@ -288,7 +367,21 @@ export default function AdminBooks() {
                         onCheckedChange={() => toggleSelectBook(book.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{book.title}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {book.cover_url && (
+                          <img 
+                            src={book.cover_url} 
+                            alt={book.title}
+                            className="h-10 w-8 rounded object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <span className="font-medium">{book.title}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>{book.author}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{book.category?.name || "Uncategorized"}</Badge>
@@ -298,7 +391,14 @@ export default function AdminBooks() {
                         variant={
                           book.status === "published" ? "default" : "secondary"
                         }
+                        className="cursor-pointer"
+                        onClick={() => handleToggleStatus(book)}
                       >
+                        {book.status === "published" ? (
+                          <Eye className="mr-1 h-3 w-3" />
+                        ) : (
+                          <EyeOff className="mr-1 h-3 w-3" />
+                        )}
                         {book.status}
                       </Badge>
                     </TableCell>
@@ -313,14 +413,28 @@ export default function AdminBooks() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEdit(book)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <a href={`/book/${book.id}`} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="mr-2 h-4 w-4" />
                               View Details
                             </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleStatus(book)}>
+                            {book.status === "published" ? (
+                              <>
+                                <EyeOff className="mr-2 h-4 w-4" />
+                                Unpublish
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Publish
+                              </>
+                            )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
@@ -342,6 +456,9 @@ export default function AdminBooks() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
                     <p className="text-muted-foreground">No books found</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Add your first book using the button above
+                    </p>
                   </TableCell>
                 </TableRow>
               )}
@@ -365,7 +482,16 @@ export default function AdminBooks() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const page = i + 1;
+                let page: number;
+                if (totalPages <= 5) {
+                  page = i + 1;
+                } else if (currentPage <= 3) {
+                  page = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  page = totalPages - 4 + i;
+                } else {
+                  page = currentPage - 2 + i;
+                }
                 return (
                   <Button 
                     key={page}
@@ -388,6 +514,13 @@ export default function AdminBooks() {
             </div>
           )}
         </div>
+
+        {/* Edit Book Dialog */}
+        <EditBookDialog
+          book={bookToEdit}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+        />
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

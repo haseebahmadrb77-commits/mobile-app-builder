@@ -10,7 +10,7 @@ import { Search, Download, Clock, BookOpen, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { useUserLibrary, useRemoveFromLibrary, useReadingProgress } from "@/hooks/useUserLibrary";
-import { useFileUpload } from "@/hooks/useFileUpload";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { formatDistanceToNow } from "date-fns";
@@ -23,7 +23,7 @@ export default function MyLibrary() {
   const { data: library = [], isLoading } = useUserLibrary();
   const { data: allProgress = [] } = useReadingProgress();
   const removeFromLibrary = useRemoveFromLibrary();
-  const { getBookDownloadUrl } = useFileUpload();
+  
   
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -108,14 +108,11 @@ export default function MyLibrary() {
     }
 
     try {
-      const signedUrl = await getBookDownloadUrl(fileUrl);
-      if (signedUrl) {
-        window.open(signedUrl, "_blank");
-        toast({
-          title: "Opening book",
-          description: `Opening "${bookTitle}"...`,
-        });
-      }
+      window.open(fileUrl, "_blank");
+      toast({
+        title: "Opening book",
+        description: `Opening "${bookTitle}"...`,
+      });
     } catch (error: any) {
       toast({
         title: "Error",

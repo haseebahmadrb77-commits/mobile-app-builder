@@ -10,7 +10,7 @@ import { Bookmark, Search, Trash2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { useUserBookmarks, useRemoveBookmark, useAddToLibrary } from "@/hooks/useUserLibrary";
-import { useFileUpload } from "@/hooks/useFileUpload";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { formatDistanceToNow } from "date-fns";
@@ -23,7 +23,7 @@ export default function Bookmarks() {
   const { data: bookmarks = [], isLoading } = useUserBookmarks();
   const removeBookmark = useRemoveBookmark();
   const addToLibrary = useAddToLibrary();
-  const { getBookDownloadUrl } = useFileUpload();
+  
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,14 +121,11 @@ export default function Bookmarks() {
     setDownloadingId(bookId);
     try {
       await addToLibrary.mutateAsync(bookId);
-      const signedUrl = await getBookDownloadUrl(fileUrl);
-      if (signedUrl) {
-        window.open(signedUrl, "_blank");
-        toast({
-          title: "Download started",
-          description: `Downloading "${title}"...`,
-        });
-      }
+      window.open(fileUrl, "_blank");
+      toast({
+        title: "Download started",
+        description: `Opening "${title}"...`,
+      });
     } catch (error: any) {
       if (!error.message.includes("already in library")) {
         toast({
