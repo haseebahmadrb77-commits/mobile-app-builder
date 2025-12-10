@@ -23,7 +23,7 @@ export default function Bookmarks() {
   const { data: bookmarks = [], isLoading } = useUserBookmarks();
   const removeBookmark = useRemoveBookmark();
   const addToLibrary = useAddToLibrary();
-  const { getSignedUrl } = useFileUpload();
+  const { getBookDownloadUrl } = useFileUpload();
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,7 +121,7 @@ export default function Bookmarks() {
     setDownloadingId(bookId);
     try {
       await addToLibrary.mutateAsync(bookId);
-      const signedUrl = await getSignedUrl(fileUrl);
+      const signedUrl = await getBookDownloadUrl(fileUrl);
       if (signedUrl) {
         window.open(signedUrl, "_blank");
         toast({
@@ -257,7 +257,6 @@ export default function Bookmarks() {
                   bookmark.book?.file_url || null, 
                   bookmark.book?.title || "Book"
                 )}
-                isDownloading={downloadingId === bookmark.book_id}
               />
             ))}
           </div>

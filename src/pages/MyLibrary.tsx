@@ -23,7 +23,7 @@ export default function MyLibrary() {
   const { data: library = [], isLoading } = useUserLibrary();
   const { data: allProgress = [] } = useReadingProgress();
   const removeFromLibrary = useRemoveFromLibrary();
-  const { getSignedUrl } = useFileUpload();
+  const { getBookDownloadUrl } = useFileUpload();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
@@ -108,7 +108,7 @@ export default function MyLibrary() {
     }
 
     try {
-      const signedUrl = await getSignedUrl(fileUrl);
+      const signedUrl = await getBookDownloadUrl(fileUrl);
       if (signedUrl) {
         window.open(signedUrl, "_blank");
         toast({

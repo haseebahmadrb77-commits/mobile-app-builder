@@ -15,7 +15,9 @@ import {
   BookText
 } from "lucide-react";
 
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+import { LucideIcon } from "lucide-react";
+
+const iconMap: Record<string, LucideIcon> = {
   "book-open": BookOpen,
   "sparkles": Sparkles,
   "book-marked": BookMarked,
@@ -28,7 +30,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "book-text": BookText,
 };
 
-const getIconComponent = (iconName: string | null) => {
+const getIconComponent = (iconName: string | null): LucideIcon => {
   if (!iconName) return BookOpen;
   return iconMap[iconName] || BookOpen;
 };
