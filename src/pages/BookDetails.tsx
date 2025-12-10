@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBook, useBooks } from "@/hooks/useBooks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAddBookmark, useRemoveBookmark, useIsBookmarked, useAddToLibrary, useIsInLibrary } from "@/hooks/useUserLibrary";
-import { useBookReviews, useCreateReview } from "@/hooks/useReviews";
+import { useBookReviews, useSubmitReview } from "@/hooks/useReviews";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
@@ -39,8 +39,8 @@ export default function BookDetails() {
   const addBookmark = useAddBookmark();
   const removeBookmark = useRemoveBookmark();
   const addToLibrary = useAddToLibrary();
-  const createReview = useCreateReview();
-  const { getSignedUrl } = useFileUpload();
+  const submitReview = useSubmitReview();
+  const { getBookDownloadUrl } = useFileUpload();
   
   const [userRating, setUserRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
@@ -106,7 +106,7 @@ export default function BookDetails() {
       }
 
       // Get signed URL and download
-      const signedUrl = await getSignedUrl(book.file_url);
+      const signedUrl = await getBookDownloadUrl(book.file_url);
       if (signedUrl) {
         window.open(signedUrl, "_blank");
         toast({
@@ -161,7 +161,7 @@ export default function BookDetails() {
     }
 
     try {
-      await createReview.mutateAsync({
+      await submitReview.mutateAsync({
         bookId: id!,
         rating: userRating,
         content: reviewText,
@@ -410,9 +410,9 @@ export default function BookDetails() {
                     />
                     <Button 
                       onClick={handleSubmitReview}
-                      disabled={createReview.isPending}
+                      disabled={submitReview.isPending}
                     >
-                      {createReview.isPending ? "Submitting..." : "Submit Review"}
+                      {submitReview.isPending ? "Submitting..." : "Submit Review"}
                     </Button>
                   </CardContent>
                 </Card>
