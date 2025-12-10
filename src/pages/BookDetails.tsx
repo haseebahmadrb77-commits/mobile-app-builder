@@ -15,7 +15,7 @@ import { useBook, useBooks } from "@/hooks/useBooks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAddBookmark, useRemoveBookmark, useIsBookmarked, useAddToLibrary, useIsInLibrary } from "@/hooks/useUserLibrary";
 import { useBookReviews, useSubmitReview } from "@/hooks/useReviews";
-import { useFileUpload } from "@/hooks/useFileUpload";
+
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 
@@ -40,7 +40,7 @@ export default function BookDetails() {
   const removeBookmark = useRemoveBookmark();
   const addToLibrary = useAddToLibrary();
   const submitReview = useSubmitReview();
-  const { getBookDownloadUrl } = useFileUpload();
+  
   
   const [userRating, setUserRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
@@ -105,15 +105,12 @@ export default function BookDetails() {
         await addToLibrary.mutateAsync(id!);
       }
 
-      // Get signed URL and download
-      const signedUrl = await getBookDownloadUrl(book.file_url);
-      if (signedUrl) {
-        window.open(signedUrl, "_blank");
-        toast({
-          title: "Download started",
-          description: `Downloading "${book.title}"...`,
-        });
-      }
+      // Open the file URL directly (works for Google Drive links)
+      window.open(book.file_url, "_blank");
+      toast({
+        title: "Download started",
+        description: `Opening "${book.title}"...`,
+      });
     } catch (error: any) {
       toast({
         title: "Download failed",

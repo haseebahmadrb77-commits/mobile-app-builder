@@ -2,6 +2,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RecentActivityFeed } from "@/components/admin/RecentActivityFeed";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
   BookOpen,
   Users,
@@ -11,52 +12,77 @@ import {
   Upload,
   Settings,
   BarChart3,
+  FolderOpen,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-
-const stats = [
-  {
-    title: "Total Books",
-    value: "5,420",
-    icon: BookOpen,
-    change: "+12%",
-    changeType: "positive" as const,
-    description: "from last month",
-  },
-  {
-    title: "Total Users",
-    value: "10,234",
-    icon: Users,
-    change: "+8%",
-    changeType: "positive" as const,
-    description: "from last month",
-  },
-  {
-    title: "Downloads",
-    value: "45,678",
-    icon: Download,
-    change: "+23%",
-    changeType: "positive" as const,
-    description: "from last month",
-  },
-  {
-    title: "Active Readers",
-    value: "3,456",
-    icon: TrendingUp,
-    change: "+5%",
-    changeType: "positive" as const,
-    description: "from last month",
-  },
-];
-
-const topBooks = [
-  { title: "The Book of Knowledge", downloads: 1234, category: "Islamic" },
-  { title: "Rumi's Poetry Collection", downloads: 987, category: "Poetry" },
-  { title: "Tales of the Prophets", downloads: 876, category: "Islamic" },
-  { title: "The Art of Living", downloads: 654, category: "Self-Help" },
-];
+import { useBooks, useCategories } from "@/hooks/useBooks";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function AdminDashboard() {
+  const { data: books = [], isLoading: booksLoading } = useBooks({});
+  const { data: categories = [] } = useCategories();
+
+  // Fetch user count
+  const { data: userCount = 0 } = useQuery({
+    queryKey: ["admin-user-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  // Calculate stats
+  const totalBooks = books.length;
+  const publishedBooks = books.filter(b => b.status === "published").length;
+  const totalDownloads = books.reduce((sum, b) => sum + (b.download_count || 0), 0);
+  const totalCategories = categories.filter(c => !c.parent_id).length;
+
+  // Get top downloaded books
+  const topBooks = [...books]
+    .sort((a, b) => (b.download_count || 0) - (a.download_count || 0))
+    .slice(0, 5);
+
+  const stats = [
+    {
+      title: "Total Books",
+      value: totalBooks.toLocaleString(),
+      icon: BookOpen,
+      subtext: `${publishedBooks} published`,
+    },
+    {
+      title: "Total Users",
+      value: userCount.toLocaleString(),
+      icon: Users,
+      subtext: "registered users",
+    },
+    {
+      title: "Total Downloads",
+      value: totalDownloads.toLocaleString(),
+      icon: Download,
+      subtext: "all time",
+    },
+    {
+      title: "Categories",
+      value: totalCategories.toLocaleString(),
+      icon: FolderOpen,
+      subtext: `${categories.length} total with subcategories`,
+    },
+  ];
+
+  if (booksLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <LoadingSpinner />
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="container py-6">
@@ -92,9 +118,8 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <p className="font-display text-2xl font-bold">{stat.value}</p>
-                <p className="mt-1 text-xs">
-                  <span className="text-green-600">{stat.change}</span>{" "}
-                  <span className="text-muted-foreground">{stat.description}</span>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stat.subtext}
                 </p>
               </CardContent>
             </Card>
@@ -126,6 +151,7 @@ export default function AdminDashboard() {
               <Button
                 variant="outline"
                 className="h-auto w-full flex-col items-start gap-1 p-4"
+                disabled
               >
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-blue-500" />
@@ -139,28 +165,31 @@ export default function AdminDashboard() {
               <Button
                 variant="outline"
                 className="h-auto w-full flex-col items-start gap-1 p-4"
+                disabled
               >
                 <div className="flex items-center gap-2">
                   <Upload className="h-5 w-5 text-secondary" />
                   <span className="font-medium">Bulk Upload</span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  Import multiple books
+                  Import multiple books (coming soon)
                 </span>
               </Button>
 
-              <Button
-                variant="outline"
-                className="h-auto w-full flex-col items-start gap-1 p-4"
-              >
-                <div className="flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">Settings</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  Configure library settings
-                </span>
-              </Button>
+              <Link to="/categories">
+                <Button
+                  variant="outline"
+                  className="h-auto w-full flex-col items-start gap-1 p-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                    <span className="font-medium">Categories</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    View all categories
+                  </span>
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -180,39 +209,64 @@ export default function AdminDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2 font-display text-lg">
               <BarChart3 className="h-5 w-5 text-primary" />
-              Top Downloads This Month
+              Top Downloaded Books
             </CardTitle>
-            <Button variant="ghost" size="sm">
-              View All
-            </Button>
+            <Link to="/admin/books">
+              <Button variant="ghost" size="sm">
+                View All
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topBooks.map((book, index) => (
-                <div
-                  key={book.title}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <p className="font-medium">{book.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {book.category}
+            {topBooks.length > 0 ? (
+              <div className="space-y-4">
+                {topBooks.map((book, index) => (
+                  <div
+                    key={book.id}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
+                        {index + 1}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        {book.cover_url && (
+                          <img 
+                            src={book.cover_url} 
+                            alt={book.title}
+                            className="h-10 w-8 rounded object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <div>
+                          <p className="font-medium">{book.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {book.author}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-primary">
+                        {(book.download_count || 0).toLocaleString()}
                       </p>
+                      <p className="text-xs text-muted-foreground">downloads</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-primary">
-                      {book.downloads.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">downloads</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No books yet</p>
+                <Link to="/admin/books">
+                  <Button className="mt-4" size="sm">
+                    Add Your First Book
+                  </Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
